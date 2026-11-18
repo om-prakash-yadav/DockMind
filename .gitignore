@@ -5,3 +5,4 @@ node_modules/
 *.log
 .expo/
 server.log
+expo.log
