@@ -137,7 +137,10 @@ public class ReceiptService {
         if (r.status == ReceiptStatus.DISPUTED) throw ApiException.conflict("ALREADY_DISPUTED", "Receipt was already disputed");
         if (r.status == ReceiptStatus.CAPTURED) throw ApiException.conflict("NOT_READY", "Receipt is still being read");
         if (r.poNumber == null) throw ApiException.conflict("PO_REQUIRED", "Assign a purchase order before confirming");
-        PurchaseOrder po = poOf(r);
+        // Lock the order too (always receipt first, then order, so two confirms cannot deadlock). Without this, two
+        // different receipts for the same order, confirmed at the same instant, would each read the same "already
+        // received" totals and both be confirmed against the same outstanding quantity.
+        PurchaseOrder po = orders.lockByPoNumber(r.poNumber).orElseThrow(() -> ApiException.notFound("Purchase order"));
 
         // Another receipt for this PO may have been confirmed since the clerk last looked, which changes what is
         // outstanding. Recompute now; if anything moved, make the clerk look again instead of confirming stale numbers.
