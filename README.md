@@ -94,6 +94,8 @@ The backend tests cover the matching rules, the answer parser, and a full HTTP s
 
 ## API
 
+Interactive docs, with a **Try it out** button on every call, are at <http://localhost:8080/swagger-ui.html> (raw spec: `/v3/api-docs`). From a phone use `http://<your-ip>:8080/swagger-ui.html`. There is no login, so keep the server on a private network.
+
 | Call | Purpose |
 |---|---|
 | `GET /purchase-orders?status=OPEN` | Open orders with received and remaining per line |
