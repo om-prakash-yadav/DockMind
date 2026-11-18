@@ -54,6 +54,20 @@ EXPO_PUBLIC_API_URL=http://192.168.1.20:8080
 
 Scan the QR code with Expo Go (Android) or the Camera app (iPhone).
 
+### Install it as a real app (Android APK, no Expo Go)
+
+A standalone build runs without Metro or Expo Go. It is built in Expo's cloud (free account needed); nothing is built on your machine.
+
+```bash
+cd mobile
+npx eas-cli login
+npx eas-cli build --platform android --profile preview
+```
+
+The first run asks to create the project and a signing key: answer yes. When it finishes (about 10 to 20 minutes) you get a link and QR code to the `.apk`; open it on the phone and allow "install unknown apps".
+
+The installed app does not know your computer's address. Tap the **gear** on the home screen, enter the server's IP (for example `192.168.1.20:8080`), press **Test connection**, then **Save**. The address is kept on the phone, so one build works on any network. The build allows plain `http://` because the dock server has no certificate.
+
 ### If the phone cannot connect
 
 1. Open `http://<your-ip>:8080/purchase-orders` in the phone's browser. If that fails, it is the network, not the app.
