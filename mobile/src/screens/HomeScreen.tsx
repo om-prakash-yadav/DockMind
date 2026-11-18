@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api, ApiError, PurchaseOrder, Receipt } from '../api';
+import { api, ApiError, PurchaseOrder, Receipt, testServer } from '../api';
+import { apiUrl, normalizeUrl, setApiUrl } from '../config';
 import { pickPhoto } from '../capture';
 import { Banner, Button, buzz, EmptyState, Pill, Skeleton, tap } from '../components/ui';
 import { discard, drain, enqueue, onSynced, peek, QueueItem, retry, useQueue } from '../offline/queue';
@@ -39,6 +40,7 @@ export default function HomeScreen({ onOpenReceipt }: { onOpenReceipt: (id: stri
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showServer, setShowServer] = useState(false);
   const [tab, setTab] = useState<Tab>('receipts');
   const [filter, setFilter] = useState<Filter>('all');
   const queue = useQueue();
@@ -135,9 +137,14 @@ The photo is kept on this phone and will be tried again.`);
           <Text style={styles.brand}>DockMind</Text>
           <Text style={styles.subtitle}>Harbor Foods · Receiving dock</Text>
         </View>
-        <View style={[styles.conn, { backgroundColor: offline ? colors.warnSoft : colors.goodSoft }]}>
-          <View style={[styles.dot, { backgroundColor: offline ? colors.warn : colors.good }]} />
-          <Text style={[styles.connText, { color: offline ? colors.warn : colors.good }]}>{offline ? 'No signal' : 'Online'}</Text>
+        <View style={styles.headRight}>
+          <View style={[styles.conn, { backgroundColor: offline ? colors.warnSoft : colors.goodSoft }]}>
+            <View style={[styles.dot, { backgroundColor: offline ? colors.warn : colors.good }]} />
+            <Text style={[styles.connText, { color: offline ? colors.warn : colors.good }]}>{offline ? 'No signal' : 'Online'}</Text>
+          </View>
+          <Pressable onPress={() => setShowServer(true)} hitSlop={10} style={styles.gear} accessibilityLabel="Server address">
+            <Ionicons name="settings-outline" size={22} color={colors.ink2} />
+          </Pressable>
         </View>
       </View>
 
@@ -232,7 +239,61 @@ The photo is kept on this phone and will be tried again.`);
           ))}
         </>
       )}
+      <ServerModal
+        visible={showServer}
+        onClose={() => setShowServer(false)}
+        onSaved={() => {
+          setShowServer(false);
+          void load();
+          void drain().catch(() => {});
+        }}
+      />
     </ScrollView>
+  );
+}
+
+/** Where the app finds the backend. Saved on the phone, so a built app works on any network. */
+function ServerModal({ visible, onClose, onSaved }: { visible: boolean; onClose: () => void; onSaved: () => void }) {
+  const [text, setText] = useState('');
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (visible) {
+      setText(apiUrl());
+      setResult(null);
+    }
+  }, [visible]);
+  const url = normalizeUrl(text);
+  const test = async () => {
+    if (!url) return;
+    setBusy(true);
+    setResult(await testServer(url));
+    setBusy(false);
+  };
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.modalBack} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.modal}>
+          <Text style={styles.modalTitle}>Server address</Text>
+          <Text style={styles.muted}>The IP address of the computer running the DockMind server, on the same Wi-Fi as this phone. Example: 192.168.1.20:8080</Text>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={(t) => { setText(t); setResult(null); }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="192.168.1.20:8080"
+            placeholderTextColor={colors.muted}
+          />
+          {text.trim() !== '' && !url && <Text style={[styles.muted, { color: colors.bad }]}>That does not look like an address.</Text>}
+          {result && <Banner kind={result.ok ? 'good' : 'bad'} text={result.message} />}
+          <Button title="Test connection" icon="pulse" kind="outline" onPress={test} busy={busy} disabled={!url} />
+          <Button title="Save" icon="checkmark" onPress={() => { if (url) void setApiUrl(url).then(onSaved); }} disabled={!url} />
+          <Button title="Cancel" kind="ghost" onPress={onClose} small />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -325,6 +386,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brand: { fontSize: 30, fontWeight: '800', color: colors.ink, letterSpacing: -0.5 },
   subtitle: { fontSize: 14, color: colors.muted, marginTop: 1 },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  gear: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line },
+  modalBack: { flex: 1, backgroundColor: 'rgba(16,24,40,0.55)', justifyContent: 'center', padding: 20 },
+  modal: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 20, gap: 14 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: colors.ink },
+  input: { borderWidth: 2, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 18, fontWeight: '600', color: colors.ink },
   conn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill },
   dot: { width: 8, height: 8, borderRadius: 4 },
   connText: { fontSize: 13, fontWeight: '700' },

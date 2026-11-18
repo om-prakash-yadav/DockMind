@@ -1,5 +1,5 @@
 import { File } from 'expo-file-system';
-import { API_URL } from './config';
+import { apiUrl, settingsReady } from './config';
 
 export type Discrepancy = 'MATCH' | 'SHORT' | 'OVER' | 'UNIT_MISMATCH' | 'UNKNOWN_ITEM' | 'NOT_DELIVERED';
 export type ReceiptStatus = 'CAPTURED' | 'EXTRACTED' | 'NEEDS_MANUAL' | 'CONFIRMED' | 'DISPUTED';
@@ -65,7 +65,7 @@ async function serverReachable(): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 4000);
   try {
-    await fetch(API_URL + '/purchase-orders?status=NONE', { signal: controller.signal });
+    await fetch(apiUrl() + '/purchase-orders?status=NONE', { signal: controller.signal });
     return true;
   } catch {
     return false;
@@ -75,11 +75,12 @@ async function serverReachable(): Promise<boolean> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 15000): Promise<T> {
+  await settingsReady; // use the address saved on the phone, not the built-in default
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(API_URL + path, { ...init, signal: controller.signal });
+    res = await fetch(apiUrl() + path, { ...init, signal: controller.signal });
   } catch (e: any) {
     clearTimeout(timer);
     const detail = String(e?.message ?? e);
@@ -112,11 +113,30 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/** Checks that a server answers at `baseUrl`, for the settings screen. Never throws. */
+export async function testServer(baseUrl: string): Promise<{ ok: boolean; message: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(baseUrl + '/purchase-orders?status=OPEN', { signal: controller.signal });
+    if (!res.ok) return { ok: false, message: `The server answered with an error (${res.status}).` };
+    const orders = await res.json();
+    return { ok: true, message: `Connected. ${Array.isArray(orders) ? orders.length : 0} open orders.` };
+  } catch (e: any) {
+    return {
+      ok: false,
+      message: e?.name === 'AbortError' ? 'No answer in 5 seconds. Check the address and the Wi-Fi.' : 'Cannot reach that address. Check the IP, the port and that both are on the same Wi-Fi.',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const api = {
   openPurchaseOrders: () => request<PurchaseOrder[]>('/purchase-orders?status=OPEN'),
   receipts: () => request<Receipt[]>('/receipts'),
   receipt: (id: string) => request<Receipt>(`/receipts/${id}`),
-  imageUrl: (id: string) => `${API_URL}/receipts/${id}/image`,
+  imageUrl: (id: string) => `${apiUrl()}/receipts/${id}/image`,
 
   /** Same idempotencyKey always returns the same receipt, so this is safe to retry. */
   async createReceipt(photoUri: string, filename: string, idempotencyKey: string) {
