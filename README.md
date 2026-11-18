@@ -73,11 +73,12 @@ The delivery notes are in `kit/delivery-notes/`. Copy a few to the phone, then u
 | `note-1-clean` | Everything matches. Confirming it closes PO-4501 |
 | `note-2-short` | Salmon short by 8, scallops not on the order, prawns not delivered |
 | `note-3-messy` | Handwritten, smudged PO. The app will not guess it; pick the PO by hand |
+| `note-4-followup` | A second trip for PO-4502: salmon 8 KG. After note 2 is **confirmed**, it is a full match for the remaining 8 (made for this project, not part of the original kit) |
 | `note-6-wrong-supplier` | A PO number that belongs to a different supplier is refused |
 | `note-8-crossed-out` | A crossed-out quantity is ignored |
 | `note-9-not-a-note` | A cafe receipt goes to manual entry |
 
-**Several trips for one order:** confirm `note-2` (72 of 80 kg salmon), then photograph a follow-up with 8 kg. It comes out as a full match for the remaining 8 kg.
+**Several trips for one order:** confirm `note-2` (72 of 80 kg salmon), then photograph `note-4-followup`. It comes out as a full match for the remaining 8 kg, and the order shows 80 of 80 salmon received.
 
 **Offline:** turn on airplane mode, photograph a note, and it appears under *Waiting to sync*. Close the app, reopen it, then turn airplane mode off. It uploads by itself, once.
 
