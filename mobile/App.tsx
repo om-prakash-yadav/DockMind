@@ -1,11 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
+import { useAutoSync } from './src/offline/useAutoSync';
 import HomeScreen from './src/screens/HomeScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
 
 /** Two screens, so a plain state switch is enough: the list, or one receipt. */
 export default function App() {
+  useAutoSync();
   const [receiptId, setReceiptId] = useState<string | null>(null);
   // Bumped on return to the list so it reloads and shows the receipt's new status.
   const [listKey, setListKey] = useState(0);
