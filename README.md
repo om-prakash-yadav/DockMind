@@ -46,7 +46,7 @@ cp .env.example .env     # then edit .env
 npx expo start --lan
 ```
 
-Put your computer's **LAN IP** in `mobile/.env` (find it with `ipconfig` / `ifconfig`). `localhost` does not work from a phone:
+Run it in a normal terminal (not `CI=1`, which turns off file watching so the phone keeps getting old code). Put your computer's **LAN IP** in `mobile/.env` (find it with `ipconfig` / `ifconfig`). `localhost` does not work from a phone:
 
 ```
 EXPO_PUBLIC_API_URL=http://192.168.1.20:8080
@@ -86,7 +86,7 @@ With the fixture reader, the file name picks the answer (`note-3-messy.png` give
 ## Tests
 
 ```bash
-cd backend && mvn test      # 20 tests
+cd backend && mvn test      # 22 tests
 cd mobile && npx tsc --noEmit
 ```
 
@@ -100,7 +100,7 @@ Interactive docs, with a **Try it out** button on every call, are at <http://loc
 |---|---|
 | `GET /purchase-orders?status=OPEN` | Open orders with received and remaining per line |
 | `GET /receipts?status=` , `GET /receipts/{id}` | List and read |
-| `POST /receipts` | Multipart `image` + `Idempotency-Key` header. `202` with status `CAPTURED`, then poll. Same key returns the same receipt (`200`) |
+| `POST /receipts` | Photo + `Idempotency-Key` header, as a multipart `image` (Swagger, curl) or as the raw body with `Content-Type: image/jpeg` and `X-Filename` (the phone app). `202` with status `CAPTURED`, then poll. Same key returns the same receipt (`200`) |
 | `PATCH /receipts/{id}/lines/{lineId}` | `{"receivedQty": 70}`, recomputes the discrepancy |
 | `PATCH /receipts/{id}` | `{"poNumber": "PO-4503"}`, assigns a PO when the reader could not |
 | `POST /receipts/{id}/confirm` | `{"acknowledged": true}` is needed when the receipt is flagged for review |
