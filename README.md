@@ -101,11 +101,11 @@ With the fixture reader, the file name picks the answer (`note-3-messy.png` give
 ## Tests
 
 ```bash
-cd backend && mvn test      # 22 tests
+cd backend && mvn test      # 24 tests
 cd mobile && npx tsc --noEmit
 ```
 
-The backend tests cover the matching rules, the answer parser, and a full HTTP scenario for deliveries split over several trips. The offline queue has **no automated tests**; I checked it by reading the code and by the server-side idempotency tests, not on a device.
+The backend tests cover the matching rules, the answer parser, and a full HTTP scenario for deliveries split over several trips, and two-clerks-at-once concurrency tests. The offline queue has **no automated tests**; I checked it by reading the code and by the server-side idempotency tests, not on a device.
 
 ## API
 
