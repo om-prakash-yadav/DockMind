@@ -82,6 +82,33 @@ public class ReceiptController {
         return ResponseEntity.status(captured.created() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(Views.of(captured.receipt()));
     }
 
+    /**
+     * The same upload with the photo as the raw request body (Content-Type image/jpeg, image/png or
+     * application/octet-stream) instead of a multipart form. The phone uses this: its HTTP client cannot build a
+     * file part from a file path, but sends bytes reliably. The file name travels in X-Filename, URL-encoded.
+     */
+    @Operation(summary = "Upload a delivery note photo as the raw request body (what the phone app uses). Same rules as the multipart form.")
+    @PostMapping(consumes = {"image/jpeg", "image/png", "image/webp", MediaType.APPLICATION_OCTET_STREAM_VALUE})
+    public ResponseEntity<Views.ReceiptView> createFromBytes(
+            @Parameter(description = "Any unique string. Reusing it returns the same receipt.", required = true)
+            @RequestHeader(value = "Idempotency-Key", required = false) String key,
+            @RequestHeader(value = "X-Filename", required = false) String filename,
+            @RequestHeader(value = "Content-Type") String contentType,
+            @RequestBody byte[] photo) {
+        if (key == null || key.isBlank()) throw ApiException.badRequest("Idempotency-Key header is required");
+        if (photo == null || photo.length == 0) throw ApiException.badRequest("image is empty");
+        String name = null;
+        if (filename != null && !filename.isBlank()) {
+            try {
+                name = java.net.URLDecoder.decode(filename, java.nio.charset.StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                name = filename;
+            }
+        }
+        var captured = capture.capture(key.trim(), photo, contentType, name);
+        return ResponseEntity.status(captured.created() ? HttpStatus.ACCEPTED : HttpStatus.OK).body(Views.of(captured.receipt()));
+    }
+
     @Operation(summary = "Correct a received quantity (the clerk wins). The server recomputes the discrepancy.")
     @PatchMapping("/{id}/lines/{lineId}")
     public Views.ReceiptView correct(@PathVariable String id, @PathVariable String lineId, @RequestBody LineCorrection body) {
