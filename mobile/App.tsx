@@ -1,9 +1,11 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { BackHandler, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAutoSync } from './src/offline/useAutoSync';
 import HomeScreen from './src/screens/HomeScreen';
 import ReceiptScreen from './src/screens/ReceiptScreen';
+import { colors } from './src/theme';
 
 /** Two screens, so a plain state switch is enough: the list, or one receipt. */
 export default function App() {
@@ -30,13 +32,15 @@ export default function App() {
   }, [receiptId]);
 
   return (
-    <View style={{ flex: 1 }}>
-      <StatusBar style="dark" />
-      {receiptId ? (
-        <ReceiptScreen id={receiptId} onBack={back} />
-      ) : (
-        <HomeScreen key={listKey} onOpenReceipt={setReceiptId} />
-      )}
-    </View>
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <StatusBar style="dark" />
+        {receiptId ? (
+          <ReceiptScreen id={receiptId} onBack={back} />
+        ) : (
+          <HomeScreen key={listKey} onOpenReceipt={setReceiptId} />
+        )}
+      </View>
+    </SafeAreaProvider>
   );
 }
