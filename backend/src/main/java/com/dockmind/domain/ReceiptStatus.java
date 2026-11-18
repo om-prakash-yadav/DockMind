@@ -1,0 +1,4 @@
+package com.dockmind.domain;
+
+/** CAPTURED -> EXTRACTED | NEEDS_MANUAL -> CONFIRMED | DISPUTED */
+public enum ReceiptStatus { CAPTURED, EXTRACTED, NEEDS_MANUAL, CONFIRMED, DISPUTED }
