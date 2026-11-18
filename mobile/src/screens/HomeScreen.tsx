@@ -188,7 +188,7 @@ export default function HomeScreen({ onOpenReceipt }: { onOpenReceipt: (id: stri
         </>
       ) : (
         <>
-          {orders.length === 0 && <EmptyState icon="file-tray-outline" title="No open orders" />}
+          {orders.length === 0 && <EmptyState icon="checkmark-done-circle-outline" title="Nothing left to receive" hint="Every order has been fully received." />}
           {orders.map((po) => (
             <View key={po.id} style={[styles.card, shadow]}>
               <View style={styles.row}>
@@ -197,14 +197,29 @@ export default function HomeScreen({ onOpenReceipt }: { onOpenReceipt: (id: stri
               </View>
               <Text style={styles.muted}>{po.supplier}</Text>
               <View style={styles.divider} />
-              {po.lines.map((l) => (
-                <View key={l.id} style={styles.row}>
-                  <Text style={styles.lineName}>{l.description}</Text>
-                  <Text style={styles.lineQty}>
-                    {l.orderedQty} {l.unit}
-                  </Text>
-                </View>
-              ))}
+              {po.lines.map((l) => {
+                const done = l.orderedQty > 0 ? Math.min(1, l.receivedQty / l.orderedQty) : 0;
+                return (
+                  <View key={l.id} style={{ gap: 4, marginBottom: 6 }}>
+                    <View style={styles.row}>
+                      <Text style={styles.lineName}>{l.description}</Text>
+                      <Text style={styles.lineQty}>
+                        {l.receivedQty > 0 ? `${l.remainingQty} ${l.unit} left` : `${l.orderedQty} ${l.unit}`}
+                      </Text>
+                    </View>
+                    {l.receivedQty > 0 && (
+                      <>
+                        <View style={styles.track}>
+                          <View style={[styles.fill, { width: `${done * 100}%` }]} />
+                        </View>
+                        <Text style={styles.muted}>
+                          {l.receivedQty} of {l.orderedQty} {l.unit} received
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                );
+              })}
             </View>
           ))}
         </>
@@ -331,6 +346,8 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 4 },
   lineName: { fontSize: 15, color: colors.ink2, flexShrink: 1 },
   lineQty: { fontSize: 15, fontWeight: '700', color: colors.ink },
+  track: { height: 6, borderRadius: 3, backgroundColor: colors.line, overflow: 'hidden' },
+  fill: { height: 6, borderRadius: 3, backgroundColor: colors.good },
   queueTop: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   thumb: { width: 56, height: 56, borderRadius: radius.sm, backgroundColor: '#E1E4E8' },
   queueActions: { flexDirection: 'row', gap: 10 },

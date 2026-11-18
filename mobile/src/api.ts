@@ -7,7 +7,12 @@ export interface ReceiptLine {
   id: string;
   poLineId: string | null;
   description: string;
+  /** The quantity on the order, as originally ordered. */
   orderedQty: number | null;
+  /** Already brought in by earlier confirmed deliveries. */
+  previouslyReceivedQty: number | null;
+  /** What this delivery is compared against: ordered minus previously received. */
+  remainingQty: number | null;
   receivedQty: number;
   unit: string | null;
   confidence: number | null;
@@ -40,7 +45,7 @@ export interface PurchaseOrder {
   poNumber: string;
   supplier: string;
   status: string;
-  lines: { id: string; description: string; orderedQty: number; unit: string }[];
+  lines: { id: string; description: string; orderedQty: number; receivedQty: number; remainingQty: number; unit: string }[];
 }
 
 /** `code` is the server's error code, or NETWORK / TIMEOUT when the server could not be reached. */

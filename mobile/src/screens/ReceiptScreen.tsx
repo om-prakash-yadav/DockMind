@@ -73,6 +73,8 @@ export default function ReceiptScreen({ id, onBack }: { id: string; onBack: () =
     } catch (e) {
       buzz('warning');
       Alert.alert('Not done', e instanceof ApiError ? e.message : 'Something went wrong. Try again.');
+      // Another delivery was confirmed meanwhile: the server has refreshed the numbers, so show them.
+      if (e instanceof ApiError && e.code === 'OUTSTANDING_CHANGED') await load();
     } finally {
       setBusy(false);
     }
@@ -269,6 +271,8 @@ function Meta({ icon, text }: { icon: React.ComponentProps<typeof Ionicons>['nam
 function LineCard({ line, editable, onEdit }: { line: ReceiptLine; editable: boolean; onEdit: () => void }) {
   const d = discrepancyStyle[line.discrepancy];
   const delta = line.delta != null && line.delta !== 0 && (line.discrepancy === 'SHORT' || line.discrepancy === 'OVER') ? ` ${line.delta > 0 ? '+' : ''}${line.delta}` : '';
+  const partial = (line.previouslyReceivedQty ?? 0) > 0;
+  const trips = partial ? `Ordered ${line.orderedQty} ${line.unit ?? ''}, ${line.previouslyReceivedQty} already received.` : null;
   const note = line.missingFromNote
     ? 'On the order, but not on the note'
     : line.corrected
@@ -286,8 +290,9 @@ function LineCard({ line, editable, onEdit }: { line: ReceiptLine; editable: boo
         </View>
         <View style={styles.qtyRow}>
           <View style={styles.qtyBox}>
-            <Text style={styles.qtyLabel}>Ordered</Text>
-            <Text style={styles.qty}>{line.orderedQty != null ? `${line.orderedQty} ${line.unit ?? ''}` : '–'}</Text>
+            {/* After earlier trips, compare with what is still to come, not the full order. */}
+            <Text style={styles.qtyLabel}>{partial ? 'Still to come' : 'Ordered'}</Text>
+            <Text style={styles.qty}>{line.remainingQty != null ? `${line.remainingQty} ${line.unit ?? ''}` : '–'}</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.muted} />
           <View style={[styles.qtyBox, { backgroundColor: d.soft }]}>
@@ -300,6 +305,7 @@ function LineCard({ line, editable, onEdit }: { line: ReceiptLine; editable: boo
             </View>
           )}
         </View>
+        {trips && <Text style={styles.lineNote}>{trips}</Text>}
         {note && (
           <Text style={[styles.lineNote, line.needsReview && !line.corrected && { color: colors.warn, fontWeight: '700' }]}>{note}</Text>
         )}
@@ -326,16 +332,18 @@ function QuantityModal({ line, onClose, onSave }: { line: ReceiptLine | null; on
           <Text style={styles.modalTitle}>{line?.description}</Text>
           <Text style={styles.muted}>
             How many {line?.unit ?? 'units'} actually arrived?
-            {line?.orderedQty != null ? ` The order says ${line.orderedQty}.` : ''}
+            {line?.remainingQty != null ? ` Still to come on the order: ${line.remainingQty}.` : ''}
           </Text>
           <View style={styles.stepper}>
             <Pressable onPress={() => step(-1)} style={styles.stepBtn} accessibilityLabel="One less"><Ionicons name="remove" size={30} color={colors.ink} /></Pressable>
             <TextInput style={styles.input} value={text} onChangeText={setText} keyboardType="decimal-pad" selectTextOnFocus />
             <Pressable onPress={() => step(1)} style={styles.stepBtn} accessibilityLabel="One more"><Ionicons name="add" size={30} color={colors.ink} /></Pressable>
           </View>
-          {line?.orderedQty != null && (
-            <Pressable onPress={() => { tap(); setText(String(line.orderedQty)); }} hitSlop={8}>
-              <Text style={styles.linkText}>Same as ordered ({line.orderedQty})</Text>
+          {line?.remainingQty != null && (
+            <Pressable onPress={() => { tap(); setText(String(line.remainingQty)); }} hitSlop={8}>
+              <Text style={styles.linkText}>
+                {(line.previouslyReceivedQty ?? 0) > 0 ? 'Same as still to come' : 'Same as ordered'} ({line.remainingQty})
+              </Text>
             </Pressable>
           )}
           <Button title="Save" icon="checkmark" onPress={() => onSave(qty)} disabled={!valid} />
