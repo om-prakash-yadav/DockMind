@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { API_URL } from './config';
 
 export type Discrepancy = 'MATCH' | 'SHORT' | 'OVER' | 'UNIT_MISMATCH' | 'UNKNOWN_ITEM' | 'NOT_DELIVERED';
@@ -59,6 +60,20 @@ export class ApiError extends Error {
   }
 }
 
+/** Quick check that the server answers at all, to tell "no connection" apart from "this one request failed". */
+async function serverReachable(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    await fetch(API_URL + '/purchase-orders?status=NONE', { signal: controller.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 15000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -66,8 +81,15 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 1500
   try {
     res = await fetch(API_URL + path, { ...init, signal: controller.signal });
   } catch (e: any) {
+    clearTimeout(timer);
+    const detail = String(e?.message ?? e);
+    // If the server still answers, the connection is fine and this particular request is what failed. Say so
+    // instead of claiming there is no signal.
+    if (await serverReachable()) {
+      throw new ApiError('REQUEST_FAILED', `The request could not be sent (${detail}).`);
+    }
     if (e?.name === 'AbortError') throw new ApiError('TIMEOUT', 'The server is taking too long. Check the signal and try again.');
-    throw new ApiError('NETWORK', 'Cannot reach the server. Check the signal and try again.');
+    throw new ApiError('NETWORK', `Cannot reach the server (${detail}). Check the signal and try again.`);
   } finally {
     clearTimeout(timer);
   }
@@ -97,10 +119,18 @@ export const api = {
   imageUrl: (id: string) => `${API_URL}/receipts/${id}/image`,
 
   /** Same idempotencyKey always returns the same receipt, so this is safe to retry. */
-  createReceipt(photoUri: string, filename: string, idempotencyKey: string) {
-    const form = new FormData();
-    form.append('image', { uri: photoUri, name: filename, type: 'image/jpeg' } as any);
-    return request<Receipt>('/receipts', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: form }, 60000);
+  async createReceipt(photoUri: string, filename: string, idempotencyKey: string) {
+    // Sent as raw bytes, not a multipart form: this Expo SDK's fetch cannot build a file part from a file path.
+    const bytes = await new File(photoUri).bytes();
+    return request<Receipt>(
+      '/receipts',
+      {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey, 'Content-Type': 'image/jpeg', 'X-Filename': encodeURIComponent(filename) },
+        body: bytes as any,
+      },
+      60000,
+    );
   },
 
   correctLine: (receiptId: string, lineId: string, receivedQty: number) =>

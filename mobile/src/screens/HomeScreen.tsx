@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError, PurchaseOrder, Receipt } from '../api';
 import { pickPhoto } from '../capture';
 import { Banner, Button, buzz, EmptyState, Pill, Skeleton, tap } from '../components/ui';
-import { discard, drain, enqueue, onSynced, QueueItem, retry, useQueue } from '../offline/queue';
+import { discard, drain, enqueue, onSynced, peek, QueueItem, retry, useQueue } from '../offline/queue';
 import { colors, issueCount, radius, shadow, statusStyle, timeAgo } from '../theme';
 
 const CACHE_KEY = 'dockmind.cache.v1';
@@ -98,7 +98,15 @@ export default function HomeScreen({ onOpenReceipt }: { onOpenReceipt: (id: stri
         onOpenReceipt(receiptId);
       } else {
         buzz('warning');
-        Alert.alert('Saved on this phone', 'There is no signal right now. The photo will upload by itself when the connection is back.');
+        const left = peek(item.localId);
+        // A real upload error (server reachable) is shown as it is; only a lost connection says "no signal".
+        if (left?.lastError && left.lastError.startsWith('The request could not be sent')) {
+          Alert.alert('Saved, but the upload failed', `${left.lastError}
+
+The photo is kept on this phone and will be tried again.`);
+        } else {
+          Alert.alert('Saved on this phone', 'There is no signal right now. The photo will upload by itself when the connection is back.');
+        }
       }
     } catch (e: any) {
       Alert.alert('Could not save the photo', e?.message ?? 'Try again.');
@@ -282,7 +290,7 @@ function QueueRow({ item }: { item: QueueItem }) {
             Photographed {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             {item.attempts > 0 ? ` · tried ${item.attempts}×` : ''}
           </Text>
-          {failed && item.lastError && <Text style={styles.muted}>{item.lastError}</Text>}
+          {item.lastError && <Text style={styles.muted}>{item.lastError}</Text>}
         </View>
         {!failed && <Ionicons name={item.state === 'syncing' ? 'cloud-upload' : 'time'} size={26} color={color} />}
       </View>

@@ -122,7 +122,7 @@ export function drain(): Promise<Map<string, string>> {
         const err = e instanceof ApiError ? e : new ApiError('ERROR', 'Upload failed');
         if (err.isOffline) {
           // No signal: not the item's fault. Keep it pending, don't count an attempt, and stop trying the rest.
-          update(current.localId, { state: 'pending', lastError: 'Waiting for signal' });
+          update(current.localId, { state: 'pending', lastError: err.message });
           await persist();
           break;
         }
@@ -168,6 +168,11 @@ export async function discard(localId: string) {
   if (item) removePhoto(item.photoUri);
   items = items.filter((i) => i.localId !== localId);
   await persist();
+}
+
+/** The current state of one queued item, or undefined once it has uploaded. */
+export function peek(localId: string): QueueItem | undefined {
+  return items.find((i) => i.localId === localId);
 }
 
 export function onSynced(listener: (receiptId: string) => void) {
