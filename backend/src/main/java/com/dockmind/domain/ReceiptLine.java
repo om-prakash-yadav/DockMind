@@ -12,8 +12,15 @@ public class ReceiptLine {
     public Long id;
     public String poLineId;
     public String description;
+    /** The quantity on the purchase order line, as originally ordered. */
     @Column(precision = 12, scale = 3)
     public BigDecimal orderedQty;
+    /** Confirmed on earlier receipts for this PO line when this receipt was last reconciled. */
+    @Column(precision = 12, scale = 3)
+    public BigDecimal previouslyReceivedQty;
+    /** Ordered minus previously received: what this line was compared against. */
+    @Column(precision = 12, scale = 3)
+    public BigDecimal outstandingQty;
     @Column(precision = 12, scale = 3)
     public BigDecimal receivedQty;
     public String unit;

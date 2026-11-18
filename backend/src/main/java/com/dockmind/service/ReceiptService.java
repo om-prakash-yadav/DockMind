@@ -6,9 +6,11 @@ import com.dockmind.domain.*;
 import com.dockmind.matching.Discrepancy;
 import com.dockmind.matching.Matcher;
 import java.math.BigDecimal;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -126,18 +128,72 @@ public class ReceiptService {
         return r;
     }
 
-    @Transactional
+    // noRollbackFor: when the outstanding quantities moved under the clerk, the refreshed numbers must be saved even
+    // though we answer 409, so the next read shows them.
+    @Transactional(noRollbackFor = ApiException.class)
     public Receipt confirm(Long id, boolean acknowledged) {
         Receipt r = receipts.lockById(id).orElseThrow(() -> ApiException.notFound("Receipt"));
-        if (r.status == ReceiptStatus.CONFIRMED) return r; // safe to repeat
+        if (r.status == ReceiptStatus.CONFIRMED) return r; // safe to repeat: totals are summed from the database
         if (r.status == ReceiptStatus.DISPUTED) throw ApiException.conflict("ALREADY_DISPUTED", "Receipt was already disputed");
         if (r.status == ReceiptStatus.CAPTURED) throw ApiException.conflict("NOT_READY", "Receipt is still being read");
         if (r.poNumber == null) throw ApiException.conflict("PO_REQUIRED", "Assign a purchase order before confirming");
+        PurchaseOrder po = poOf(r);
+
+        // Another receipt for this PO may have been confirmed since the clerk last looked, which changes what is
+        // outstanding. Recompute now; if anything moved, make the clerk look again instead of confirming stale numbers.
+        Map<String, BigDecimal> before = outstandingByPoLine(r);
+        reconcile(r, po);
+        if (!before.equals(outstandingByPoLine(r))) {
+            throw ApiException.conflict("OUTSTANDING_CHANGED",
+                    "Another delivery for this order was confirmed meanwhile. The remaining quantities have been updated; please check them.");
+        }
         if (r.needsReview && !acknowledged) {
             throw ApiException.conflict("NEEDS_REVIEW", "Low confidence or unresolved items: review before confirming");
         }
         r.status = ReceiptStatus.CONFIRMED;
+        closeIfFullyReceived(po);
         return r;
+    }
+
+    /** What each linked line was compared against, normalised so 8 and 8.000 are equal. */
+    private static Map<String, BigDecimal> outstandingByPoLine(Receipt r) {
+        Map<String, BigDecimal> m = new HashMap<>();
+        for (ReceiptLine l : r.lines) {
+            if (l.poLineId != null && l.outstandingQty != null) m.put(l.poLineId, l.outstandingQty.stripTrailingZeros());
+        }
+        return m;
+    }
+
+    /**
+     * Marks the PO RECEIVED, which drops it off the open list, once confirmed deliveries cover every line in full.
+     * Disputed receipts never count. Over-delivery counts as received.
+     */
+    private void closeIfFullyReceived(PurchaseOrder po) {
+        Map<String, BigDecimal> got = confirmedTotals(po, -1L);
+        boolean complete = po.lines.stream().allMatch(p -> Matcher.outstanding(p.orderedQty, got.get(p.id)).signum() == 0);
+        if (complete) {
+            po.status = "RECEIVED";
+            orders.save(po);
+        }
+    }
+
+    /**
+     * Quantity already received per PO line, summed over CONFIRMED receipts only (optionally leaving one out).
+     * Lines in a different unit than the order line are not comparable and are not counted.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, BigDecimal> confirmedTotals(PurchaseOrder po, Long excludeReceiptId) {
+        Map<String, String> unitOf = new HashMap<>();
+        po.lines.forEach(p -> unitOf.put(p.id, Matcher.normalizeUnit(p.unit)));
+        Map<String, BigDecimal> totals = new HashMap<>();
+        for (Object[] row : receipts.confirmedLines(po.poNumber, excludeReceiptId == null ? -1L : excludeReceiptId)) {
+            String poLineId = (String) row[0];
+            BigDecimal qty = (BigDecimal) row[1];
+            if (qty == null || !unitOf.containsKey(poLineId)) continue;
+            if (!Objects.equals(Matcher.normalizeUnit((String) row[2]), unitOf.get(poLineId))) continue;
+            totals.merge(poLineId, qty, BigDecimal::add);
+        }
+        return totals;
     }
 
     @Transactional
@@ -192,24 +248,30 @@ public class ReceiptService {
      * (and drops earlier ones of those, so this is safe to run again), then refreshes the review flags.
      */
     private void reconcile(Receipt r, PurchaseOrder po) {
+        // What earlier confirmed deliveries already brought in. Read from the database every time, never stored
+        // as a running counter, so confirming twice or retrying can never double-count.
+        Map<String, BigDecimal> already = po == null ? Map.of() : confirmedTotals(po, r.id);
         r.lines.removeIf(l -> l.missingFromNote);
         Set<String> present = new HashSet<>();
         for (ReceiptLine line : r.lines) {
             PoLine linked = po == null || line.poLineId == null ? null
                     : po.lines.stream().filter(p -> p.id.equals(line.poLineId)).findFirst().orElse(null);
             if (linked == null) line.poLineId = null; else present.add(linked.id);
-            apply(line, linked);
+            apply(line, linked, linked == null ? null : already.get(linked.id));
         }
         if (po != null) {
             for (PoLine p : po.lines) {
                 if (present.contains(p.id)) continue;
+                BigDecimal got = already.get(p.id);
+                // A line that earlier deliveries already completed is not "missing" from this one.
+                if (Matcher.outstanding(p.orderedQty, got).signum() == 0) continue;
                 ReceiptLine missing = new ReceiptLine();
                 missing.poLineId = p.id;
                 missing.description = p.description;
                 missing.receivedQty = BigDecimal.ZERO;
                 missing.unit = p.unit;
                 missing.missingFromNote = true;
-                apply(missing, p);
+                apply(missing, p, got);
                 r.lines.add(missing);
             }
         }
@@ -218,11 +280,14 @@ public class ReceiptService {
                 || r.lines.stream().anyMatch(l -> l.needsReview);
     }
 
-    private void apply(ReceiptLine line, PoLine linked) {
-        Matcher.Result res = Matcher.classify(line.receivedQty, line.unit,
-                linked == null ? null : linked.orderedQty, linked == null ? null : linked.unit);
+    /** Compares one line to what is still outstanding on its order line (ordered minus earlier confirmed receipts). */
+    private void apply(ReceiptLine line, PoLine linked, BigDecimal alreadyReceived) {
+        BigDecimal outstanding = linked == null ? null : Matcher.outstanding(linked.orderedQty, alreadyReceived);
+        Matcher.Result res = Matcher.classify(line.receivedQty, line.unit, outstanding, linked == null ? null : linked.unit);
         line.discrepancy = res.discrepancy();
-        line.orderedQty = res.orderedQty();
+        line.orderedQty = linked == null ? null : linked.orderedQty;
+        line.previouslyReceivedQty = linked == null ? null : (alreadyReceived == null ? BigDecimal.ZERO : alreadyReceived);
+        line.outstandingQty = res.orderedQty();
         line.delta = res.delta();
         line.needsReview = !line.correctedByClerk && line.confidence != null && line.confidence < reviewThreshold;
     }

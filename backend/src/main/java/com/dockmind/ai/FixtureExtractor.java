@@ -23,9 +23,18 @@ public class FixtureExtractor implements Extractor {
 
     @Override
     public Extraction extract(byte[] image, String mimeType, String filename) throws Exception {
-        Matcher m = filename == null ? null : NAME.matcher(filename);
-        int n = m != null && m.find() ? Integer.parseInt(m.group(1)) : next.getAndIncrement() % FIXTURES + 1;
-        try (InputStream in = new ClassPathResource("fixtures/note-" + n + ".extracted.json").getInputStream()) {
+        String name;
+        String base = filename == null ? "" : filename.replaceAll("\\.[^.]*$", "");
+        if (!base.isEmpty() && new ClassPathResource("fixtures/" + base + ".extracted.json").exists()) {
+            name = base; // a fixture named exactly after the file, e.g. for tests
+        } else if (filename != null && filename.toLowerCase().contains("followup")) {
+            name = "note-followup"; // the second trip for PO-4502
+        } else {
+            Matcher m = filename == null ? null : NAME.matcher(filename);
+            int n = m != null && m.find() ? Integer.parseInt(m.group(1)) : next.getAndIncrement() % FIXTURES + 1;
+            name = "note-" + n;
+        }
+        try (InputStream in = new ClassPathResource("fixtures/" + name + ".extracted.json").getInputStream()) {
             return ExtractionParser.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         }
     }

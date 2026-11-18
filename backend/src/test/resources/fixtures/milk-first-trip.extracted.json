@@ -1,0 +1,12 @@
+{
+  "supplierName": "Dairy Direct",
+  "deliveryNoteNo": "DN-T-1",
+  "poNumber": "PO-4503",
+  "poConfidence": 0.98,
+  "lines": [
+    { "description": "Milk 1L", "poLineId": null, "qty": 100, "unit": "EA", "confidence": 0.97 }
+  ],
+  "freeText": null,
+  "overallConfidence": 0.97,
+  "aiNote": "Milk only."
+}

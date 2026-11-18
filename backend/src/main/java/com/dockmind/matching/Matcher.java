@@ -32,6 +32,17 @@ public final class Matcher {
     }
 
     /**
+     * What is still to arrive on an order line: the ordered quantity minus what earlier CONFIRMED receipts already
+     * brought in, never below zero. This is the only place that turns "ordered" into "outstanding"; classify() is
+     * then handed the outstanding amount, so deliveries split over several trips need no other change.
+     */
+    public static BigDecimal outstanding(BigDecimal ordered, BigDecimal alreadyReceived) {
+        if (ordered == null) return null;
+        BigDecimal left = alreadyReceived == null ? ordered : ordered.subtract(alreadyReceived);
+        return left.signum() < 0 ? BigDecimal.ZERO : left;
+    }
+
+    /**
      * Rules, in order: no linked order line is UNKNOWN_ITEM; a different unit is UNIT_MISMATCH (quantities are not
      * comparable across units); nothing received is NOT_DELIVERED; otherwise SHORT, OVER or MATCH.
      */

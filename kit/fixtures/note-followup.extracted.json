@@ -1,0 +1,12 @@
+{
+  "supplierName": "Blue Ocean Seafood Co.",
+  "deliveryNoteNo": "DN-30461",
+  "poNumber": "PO-4502",
+  "poConfidence": 0.97,
+  "lines": [
+    { "description": "Salmon fillet", "poLineId": null, "qty": 8, "unit": "KG", "confidence": 0.96 }
+  ],
+  "freeText": null,
+  "overallConfidence": 0.96,
+  "aiNote": "Follow-up delivery: 8 kg of salmon only."
+}

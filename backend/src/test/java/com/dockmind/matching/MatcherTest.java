@@ -54,6 +54,22 @@ class MatcherTest {
     }
 
     @Test
+    void outstandingIsOrderedMinusReceivedNeverBelowZero() {
+        assertEquals(0, n(8).compareTo(Matcher.outstanding(n(80), n(72))));
+        assertEquals(0, n(80).compareTo(Matcher.outstanding(n(80), null)));
+        assertEquals(0, BigDecimal.ZERO.compareTo(Matcher.outstanding(n(80), n(95)))); // over-delivered earlier
+        assertNull(Matcher.outstanding(null, n(5)));
+    }
+
+    @Test
+    void followUpTripMatchesWhenItBringsExactlyWhatWasOutstanding() {
+        var remaining = Matcher.outstanding(n(80), n(72));
+        assertEquals(Discrepancy.MATCH, Matcher.classify(n(8), "KG", remaining, "KG").discrepancy());
+        assertEquals(Discrepancy.OVER, Matcher.classify(n(10), "KG", remaining, "KG").discrepancy());
+        assertEquals(Discrepancy.SHORT, Matcher.classify(n(5), "KG", remaining, "KG").discrepancy());
+    }
+
+    @Test
     void descriptionsMatchWhenOneIsAShortening() {
         assertTrue(Matcher.descriptionsOverlap("Cheddar", "Cheddar, mature"));
         assertFalse(Matcher.descriptionsOverlap("Scallops", "Tiger Prawns"));
